@@ -98,7 +98,8 @@ class RegularWorkerTestCase(WmsTestCase):
         orig_commit = regular.registry.commit
         regular.registry.commit = lambda: None
         try:
-            self.assertEqual(regular.process_one()[0], 'Model.Wms.Operation.Move')
+            self.assertEqual(regular.process_one()[0],
+                             'Model.Wms.Operation.Move')
             unpack_info = regular.process_one()
         finally:
             regular.registry.commit = orig_commit

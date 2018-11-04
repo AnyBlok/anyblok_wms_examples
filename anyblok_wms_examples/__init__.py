@@ -14,4 +14,4 @@ version = '0.8.0.dev0'
 
 
 def init_config(**kw):
-    from .launcher import config  # flake8: noqa
+    from .launcher import config  # noqa
