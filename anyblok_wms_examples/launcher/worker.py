@@ -103,7 +103,7 @@ class WmsExamplesContinuousWorker:
                     logger.exception("%s: catched exception in main loop",
                                      self_str)
                 self.registry.rollback()
-            except:
+            except Exception:
                 logger.exception("%s: got exception in main loop", self_str)
                 self.registry.rollback()
             else:
@@ -227,7 +227,7 @@ class Regular:
                     logger.exception("%s, catched exception in main loop",
                                      self_str)
                 self.registry.rollback()
-            except:
+            except Exception:
                 self.registry.rollback()
                 logger.exception("%s, exception in process_one()", self_str)
 
