@@ -8,7 +8,7 @@
 # obtain one at http://mozilla.org/MPL/2.0/.
 import logging
 from datetime import datetime, timedelta
-
+from sqlalchemy import func
 from anyblok import Declarations
 
 logger = logging.getLogger(__name__)
@@ -170,11 +170,19 @@ class Regular(Mixin.WmsBasicSellerUtil):
         if query is not None:
             return query
         logger.warning("Lock query not found in cache")
-        Operation = self.registry.Wms.Operation
+        Wms = self.registry.Wms
+        Operation = Wms.Operation
+        HI = Operation.HistoryInput
+        Avatar = Wms.PhysObj.Avatar
+        all_inputs_present = Avatar.query(
+            func.bool_and(Avatar.state == 'present')).join(
+                HI.avatar).filter(HI.operation_id == Operation.id)
         query = Operation.query(Operation.id).filter(
             Operation.type != 'wms_arrival',
+            all_inputs_present.as_scalar(),
             Operation.state == 'planned').order_by(
                 Operation.dt_execution).with_for_update(
+                    of=Operation,
                     key_share=True,
                     skip_locked=True)
         self._planned_lock_query = query
@@ -183,45 +191,22 @@ class Regular(Mixin.WmsBasicSellerUtil):
     def select_ready_operation(self):
         """Find an operation ready to be processed (and lock it)
 
-        :return: the operation or None and boolean telling if no operation was
-                 found if that's definitive
+        :return: the operation or None
         """
         Operation = self.registry.Wms.Operation
         # starting with a fresh MVCC snapshot
         self.registry.commit()
-        # TODO this is too complicated: locking an op then climbing along
-        # the 'follows' relation to find an executable one.
-        # it'd be much simpler to look for an Operation whose inputs are
-        # all present.
         planned_id = self.planned_op_lock_query().first()
         if planned_id is None:
-            return None, True
+            return None
         planned = Operation.query().get(planned_id)
-        previous_planned = True
-        while previous_planned:
-            previous_planned = [
-                op.id for op in planned.follows if op.state == 'planned']
-            if not previous_planned:
-                break
-            planned = Operation.query().filter(
-                Operation.id.in_(previous_planned)).with_for_update(
-                    key_share=True,
-                    skip_locked=True).first()
-            if planned is None:
-                return None, False
-        return planned, None
+        return planned
 
     def process_one(self):
         """Find any Operation that can be done, and execute it."""
-        # first alternative: climbing up planned operations, without
-        # complicated outer join to avatars that are conflict sources
-        # for PG
-        op, stop = self.select_ready_operation()
+        op = self.select_ready_operation()
         if op is None:
-            if stop:
-                return
-            else:
-                return True
+            return
 
         logger.info("%s, found op ready to be executed: %r, doing it now.",
                     self, op)
